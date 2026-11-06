@@ -1,0 +1,373 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: License management, verification, and usage analytics API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: admin
+    description: Authenticated license administration
+  - name: licenses
+    description: License lifecycle operations
+  - name: verification
+    description: Public client verification endpoints
+  - name: analytics
+    description: Usage summaries and activity
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /admin/me:
+    get:
+      operationId: getAdminMe
+      tags: [admin]
+      summary: Get the signed-in administrator state
+      responses:
+        "200":
+          description: Signed-in account state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminMe"
+        "401":
+          description: Sign-in required
+  /licenses:
+    get:
+      operationId: listLicenses
+      tags: [licenses]
+      summary: Search and paginate licenses
+      parameters:
+        - in: query
+          name: search
+          schema: { type: string, maxLength: 120 }
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [active, expired, revoked]
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: pageSize
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: License page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LicenseList"
+        "401":
+          description: Sign-in required
+        "403":
+          description: Administrator access required
+    post:
+      operationId: createLicense
+      tags: [licenses]
+      summary: Generate a license key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LicenseInput"
+      responses:
+        "201":
+          description: Created license; full key is returned only once
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedLicense"
+        "400":
+          description: Invalid license input
+        "401":
+          description: Sign-in required
+        "403":
+          description: Administrator access required
+  /licenses/{id}/revoke:
+    post:
+      operationId: revokeLicense
+      tags: [licenses]
+      summary: Revoke a license immediately
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      responses:
+        "200":
+          description: Revoked license
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/License"
+        "404":
+          description: License not found
+        "401":
+          description: Sign-in required
+        "403":
+          description: Administrator access required
+  /licenses/{id}/reset-device:
+    post:
+      operationId: resetLicenseDevice
+      tags: [licenses]
+      summary: Clear a license device registration
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      responses:
+        "200":
+          description: Reset license
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/License"
+        "404":
+          description: License not found
+        "401":
+          description: Sign-in required
+        "403":
+          description: Administrator access required
+  /analytics/summary:
+    get:
+      operationId: getAnalyticsSummary
+      tags: [analytics]
+      summary: Get license and usage metrics
+      responses:
+        "200":
+          description: Analytics summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsSummary"
+        "401":
+          description: Sign-in required
+        "403":
+          description: Administrator access required
+  /activity:
+    get:
+      operationId: listActivity
+      tags: [analytics]
+      summary: Get recent license and verification events
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+      responses:
+        "200":
+          description: Recent activity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivityList"
+        "401":
+          description: Sign-in required
+        "403":
+          description: Administrator access required
+  /key/verify:
+    post:
+      operationId: verifyLicenseKey
+      tags: [verification]
+      summary: Verify a license from an authorized client
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerificationInput"
+      responses:
+        "200":
+          description: Verification result, including ordinary denials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerificationResult"
+        "400":
+          description: Invalid request
+        "429":
+          description: Too many verification requests
+  /track/checkpoint:
+    post:
+      operationId: trackCheckpoint
+      tags: [verification]
+      summary: Record an external checkpoint page view
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckpointInput"
+      responses:
+        "201":
+          description: Page view recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckpointResult"
+        "400":
+          description: Invalid request
+        "429":
+          description: Too many checkpoint requests
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+    AdminMe:
+      type: object
+      properties:
+        userId: { type: string }
+        isAdmin: { type: boolean }
+      required: [userId, isAdmin]
+    LicenseInput:
+      type: object
+      properties:
+        hours: { type: integer, minimum: 1, maximum: 87600, default: 24 }
+        note: { type: string, maxLength: 200 }
+      required: [hours]
+    License:
+      type: object
+      properties:
+        id: { type: string }
+        keyPreview: { type: string }
+        note: { type: ["string", "null"] }
+        status: { type: string, enum: [active, expired, revoked] }
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        activatedAt: { type: ["string", "null"], format: date-time }
+        deviceBound: { type: boolean }
+        totalValidations: { type: integer, minimum: 0 }
+      required: [id, keyPreview, note, status, createdAt, expiresAt, activatedAt, deviceBound, totalValidations]
+    CreatedLicense:
+      type: object
+      properties:
+        id: { type: string }
+        key: { type: string }
+        keyPreview: { type: string }
+        note: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+      required: [id, key, keyPreview, note, createdAt, expiresAt]
+    LicenseList:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/License" }
+        total: { type: integer, minimum: 0 }
+        page: { type: integer, minimum: 1 }
+        pageSize: { type: integer, minimum: 1 }
+      required: [items, total, page, pageSize]
+    DailyMetric:
+      type: object
+      properties:
+        date: { type: string, format: date }
+        pageViews: { type: integer, minimum: 0 }
+        validations: { type: integer, minimum: 0 }
+      required: [date, pageViews, validations]
+    HourlyMetric:
+      type: object
+      properties:
+        hour: { type: integer, minimum: 0, maximum: 23 }
+        validations: { type: integer, minimum: 0 }
+      required: [hour, validations]
+    EnvironmentMetric:
+      type: object
+      properties:
+        environment: { type: string }
+        validations: { type: integer, minimum: 0 }
+      required: [environment, validations]
+    AnalyticsSummary:
+      type: object
+      properties:
+        totalTokens: { type: integer, minimum: 0 }
+        activeTokens: { type: integer, minimum: 0 }
+        totalViews: { type: integer, minimum: 0 }
+        totalValidations: { type: integer, minimum: 0 }
+        conversionRate: { type: number, minimum: 0 }
+        dailyTrend:
+          type: array
+          items: { $ref: "#/components/schemas/DailyMetric" }
+        hourlyUsage:
+          type: array
+          items: { $ref: "#/components/schemas/HourlyMetric" }
+        environmentBreakdown:
+          type: array
+          items: { $ref: "#/components/schemas/EnvironmentMetric" }
+      required: [totalTokens, activeTokens, totalViews, totalValidations, conversionRate, dailyTrend, hourlyUsage, environmentBreakdown]
+    ActivityEvent:
+      type: object
+      properties:
+        id: { type: string }
+        eventType:
+          type: string
+          enum: [issued, activation, validation, checkpoint, security, revoked, device_reset]
+        outcome: { type: string }
+        keyPreview: { type: ["string", "null"] }
+        clientVersion: { type: ["string", "null"] }
+        environment: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+      required: [id, eventType, outcome, keyPreview, clientVersion, environment, createdAt]
+    ActivityList:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ActivityEvent" }
+        total: { type: integer, minimum: 0 }
+      required: [items, total]
+    VerificationInput:
+      type: object
+      properties:
+        key: { type: string, minLength: 8, maxLength: 256 }
+        installId: { type: string, minLength: 8, maxLength: 128 }
+        clientVersion: { type: string, maxLength: 64 }
+        environment: { type: string, maxLength: 64 }
+      required: [key, installId]
+    VerificationResult:
+      type: object
+      properties:
+        success: { type: boolean }
+        code:
+          type: string
+          enum: [active, expired, device_mismatch, revoked, invalid]
+        activated: { type: boolean }
+        expiresAt: { type: ["string", "null"], format: date-time }
+        remainingSeconds: { type: integer, minimum: 0 }
+        totalValidations: { type: integer, minimum: 0 }
+      required: [success, code, activated, expiresAt, remainingSeconds, totalValidations]
+    CheckpointInput:
+      type: object
+      properties:
+        flowId: { type: string, maxLength: 120 }
+        clientVersion: { type: string, maxLength: 64 }
+        environment: { type: string, maxLength: 64 }
+      additionalProperties: false
+    CheckpointResult:
+      type: object
+      properties:
+        tracked: { type: boolean }
+      required: [tracked]
+

@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "License Manager"
+description = "A secure software license control center for issuing and revoking keys, reviewing authorized client validations, and monitoring usage."
+version = "1.0.0"
+id = "artifacts/license-manager"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19496
+
+[services.development]
+run = "pnpm --filter @workspace/license-manager run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/license-manager", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/license-manager/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19496"
+BASE_PATH = "/"
